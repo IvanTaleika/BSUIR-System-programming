@@ -14,8 +14,8 @@ enum ERRORS {
 };
 
 QList<pthread_t> threadList;
-int threadTidOutputTimer;
 pthread_mutex_t mutex;
+int threadTidOutputTimer;
 
 void* threadFunction(void* arg);
 void setupResources(int argc, char* argv[]);
