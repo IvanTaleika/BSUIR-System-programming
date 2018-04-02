@@ -1,69 +1,74 @@
 #include <QDir>
 #include <QDebug>
 #include <QList>
-#include <QFile>
-#include <pthread.h>
 #include <semaphore.h>
-#include <signal.h>
-#include <unistd.h>
+#include "asynchrw.h"
+
 enum ERROR {
   NO_SOURCE_FILE_ERROR,
   SEMAPHORE_ERROR,
-  FILE_ERROR
+  FILE_ERROR,
+  SIGACTION_ERROR
 };
 
-struct ThreadData {
-  volatile sig_atomic_t* isThreadEnded;
-  sem_t* semaphore;
-  volatile QStringList* dataList;
-  QFileInfoList* fileInfoList;
-  ThreadData(volatile sig_atomic_t* isThreadEnded, sem_t* semaphore,
-             volatile QStringList* dataList, QFileInfoList* fileInfoList) {
-    this->isThreadEnded = isThreadEnded;
-    this->semaphore = semaphore;
-    this->dataList = dataList;
-    this->fileInfoList = fileInfoList;
-  }
-};
+
+sem_t semaphore;
 
 void initData(QFileInfoList& fileInfoList, QDir fromDir, QFile& destination, QString to, sem_t* semaphore);
-void showError(ERROR error);
-void* threadReadFile(void* arg);
-void threadCleanupHandler(void* arg);
 
-int main(int argc, char* argv[]) {
+
+void showError(ERROR error);
+void readEndHandler(int iSignal);
+
+int main(void) {
   QDir sourceFileDir(QDir::current());
   sourceFileDir.cdUp();
 
   QFileInfoList fileInfoList;
   QFile destination;
-  sem_t semaphore;
 
   initData(fileInfoList, sourceFileDir, destination,
            sourceFileDir.absolutePath() + "/Lab5/FileMerger.txt", &semaphore);
 
-  volatile sig_atomic_t isThreadEnded = 0;
-  pthread_t myThread;
-  volatile QStringList dataList;
+  QVector<AsyncData> readerDataVector(fileInfoList.size());
+  QStringList dataList;
 
-  ThreadData readerData(&isThreadEnded, &semaphore, &dataList, &fileInfoList);
-
-  pthread_create(&myThread, NULL, threadReadFile, &readerData);
-  int semaphoreValue;
-  while (true) {
-    sem_wait(&semaphore);
-    sem_getvalue(&semaphore, &semaphoreValue);
-    if (isThreadEnded && !semaphoreValue) {
-      break;
+  for (int i = 0; i < readerDataVector.size(); i++) {
+    QFile* file = new QFile(fileInfoList.at(i).absoluteFilePath());
+    if (file->open(QIODevice::ReadOnly)) {
+      readerDataVector[i].file = file;
+      readerDataVector[i].signal = SIGUSR1;
+      dataList.append("");
+      readerDataVector[i].string = &dataList[i];
+      asynchRead(&readerDataVector[i]);
+    } else {
+      delete file;
+      readerDataVector.removeAt(i);
+      i--;
     }
-    destination.write(const_cast<QStringList&>(dataList).takeFirst().toUtf8());
   }
-  destination.close();
+  QVector<AsyncData> writerDataVector(readerDataVector.size());
+
+  for (int i = 0; i < writerDataVector.size(); i++) {
+    writerDataVector[i].signal = -1;
+    writerDataVector[i].file = &destination;
+    writerDataVector[i].string = &dataList[i];
+    sem_wait(&semaphore);
+    asynchWrite(&writerDataVector[i]);
+
+  }
   sem_destroy(&semaphore);
+  for (int i = 0; i < readerDataVector.size(); i++) {
+    readerDataVector[i].file->close();
+    delete readerDataVector[i].file;
+  }
+
+  destination.close();
   return 0;
 }
 
-void initData(QFileInfoList& fileInfoList, QDir fromDir, QFile& destination, QString to, sem_t* semaphore) {
+void initData(QFileInfoList& fileInfoList, QDir fromDir,
+              QFile& destination, QString to, sem_t* semaphore) {
   fileInfoList = fromDir.entryInfoList(QStringList("*.txt"), QDir::Files);
   if (fileInfoList.isEmpty()) {
     showError(NO_SOURCE_FILE_ERROR);
@@ -78,36 +83,15 @@ void initData(QFileInfoList& fileInfoList, QDir fromDir, QFile& destination, QSt
     showError(SEMAPHORE_ERROR);
     exit(SEMAPHORE_ERROR);
   }
-}
-
-void* threadReadFile(void* arg) {
-  ThreadData* data = (ThreadData*)arg;
-  pthread_cleanup_push(threadCleanupHandler, arg);
-  if (data->fileInfoList->isEmpty()) {
-    pthread_exit(nullptr);
+  struct sigaction readStruct;
+  readStruct.sa_handler = readEndHandler;
+  if (sigaction(SIGUSR1, &readStruct, NULL) == -1) {
+    showError(SIGACTION_ERROR);
+    exit(SIGACTION_ERROR);
   }
-
-  for (int i = 0; i < data->fileInfoList->size(); i++) {
-    QFile source(data->fileInfoList->at(i).absoluteFilePath());
-    if (source.open(QIODevice::ReadOnly)) {
-      while (!source.atEnd()) {
-        const_cast<QStringList*>(data->dataList)->append(source.readLine());
-        sem_post(data->semaphore);
-      }
-      source.close();
-    } else {
-      const_cast<QStringList*>(data->dataList)->append("Error with " + source.fileName());
-      sem_post(data->semaphore);
-    }
-  }
-  pthread_cleanup_pop(1);
-  return nullptr;
 }
 
-void threadCleanupHandler(void* arg) {
-  (*(((ThreadData*)arg)->isThreadEnded))++;
-  sem_post(((ThreadData*)arg)->semaphore);
-}
+
 
 void showError(ERROR error) {
   QTextStream cout(stdout);
@@ -116,12 +100,19 @@ void showError(ERROR error) {
       cout << "No source files" << endl;
       return;
     case SEMAPHORE_ERROR:
-      cout << "Error with semaphore " << errno << endl;
+      cout << "Error with semaphore: " << errno << endl;
       return;
     case FILE_ERROR:
       cout << "Connot open destination file" << endl;
       return;
+    case SIGACTION_ERROR:
+      cout << "Error with sigaction: " << errno << endl;
+      return;
   }
+
 }
 
 
+void readEndHandler(int iSignal) {
+  sem_post(&semaphore);
+}

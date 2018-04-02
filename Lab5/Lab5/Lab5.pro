@@ -16,6 +16,11 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += main.cpp
 
-#QMAKE_CXXFLAGS += -Wall
 QMAKE_CXXFLAGS += -pthread
-#QMAKE_CXXFLAGS += -fpermissive
+
+HEADERS +=
+
+unix:!macx: LIBS += -L$$PWD/../lib/ -lasynchRW
+
+INCLUDEPATH += $$PWD/../include
+DEPENDPATH += $$PWD/../include
