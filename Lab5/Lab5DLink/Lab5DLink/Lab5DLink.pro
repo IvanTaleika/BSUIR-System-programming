@@ -16,3 +16,8 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += \
         main.cpp
+
+unix:!macx: LIBS += -L$$PWD/../../lib/ -lasynchRW
+
+INCLUDEPATH += $$PWD/../../include
+DEPENDPATH += $$PWD/../../include
