@@ -1,0 +1,12 @@
+#ifndef ASYNCHRW_GLOBAL_H
+#define ASYNCHRW_GLOBAL_H
+
+#include <QtCore/qglobal.h>
+
+#if defined(ASYNCHRW_LIBRARY)
+#  define ASYNCHRWSHARED_EXPORT Q_DECL_EXPORT
+#else
+#  define ASYNCHRWSHARED_EXPORT Q_DECL_IMPORT
+#endif
+
+#endif // ASYNCHRW_GLOBAL_H
