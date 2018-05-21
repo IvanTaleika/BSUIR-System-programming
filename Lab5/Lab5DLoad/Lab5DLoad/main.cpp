@@ -4,7 +4,7 @@
 #include <semaphore.h>
 #include <QLibrary>
 
-#define SHARED_LIBRARY_PATH "/home/ivan/Programing/Labs/asynchRWClass/build-asynchRWClass-Desktop_Qt_5_10_1_GCC_64bit-Debug/libasynchRWClass.so"
+#define SHARED_LIBRARY_PATH "/home/ivan/Programing/Labs/SPO/Lab5/lib/libasynchRW.so"
 #define FUNCTION_NAME "merge"
 
 enum ERROR {

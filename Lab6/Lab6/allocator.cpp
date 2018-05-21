@@ -78,7 +78,7 @@ void* Allocator::realloc(void* ptr, size_t newSize) {
   }
   void* newPtr = malloc(newSize);
   MemoryChunkData* oldChunk = (MemoryChunkData*)((char*)ptr - sizeof(MemoryChunkData));
-  size_t copySize = oldChunk->size > newSize ? newSize : oldChunk->size;
+  size_t copySize = (oldChunk->size - sizeof(MemoryChunkData)) > newSize ? newSize : (oldChunk->size - sizeof(MemoryChunkData));
   memcpy(newPtr, ptr, copySize);
   free(ptr);
   return newPtr;
